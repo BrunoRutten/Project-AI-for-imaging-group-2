@@ -155,3 +155,4 @@ history = model.fit(train_gen, steps_per_epoch=train_steps,
                     validation_steps=val_steps,
                     epochs=10,
                     callbacks=callbacks_list)
+#einde
