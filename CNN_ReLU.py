@@ -1,3 +1,4 @@
+<<<<<<< HEAD
 """
 Project AI for Medical Image Analysis
 Group 2
