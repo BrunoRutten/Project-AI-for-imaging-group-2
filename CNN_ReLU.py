@@ -1,3 +1,12 @@
+<<<<<<< HEAD
+"""
+Project AI for Medical Image Analysis
+Group 2
+Note: this code is adapted from: 
+    https://github.com/Haikoitoh/paper-implementation
+Version 2, 28-3-2023
+"""
+
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.optimizers import Adam
@@ -10,7 +19,26 @@ from tensorflow.keras.optimizers import SGD
 import os
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'  # or any {'0', '1', '2'}   
 
-def expansion_block(x,t,filters,block_id):
+def expansion_block(x, t: int, filters: int, block_id: int):
+    """
+    Expansion block in MobileNetV2 network.
+
+    Parameters
+    ----------
+    x : Tensor
+        Input tensor.
+    t : int
+        Expansion factor.
+    filters : int
+        Number of output filters in the depthwise convolution layer.
+    block_id : int
+        Block identifier.
+
+    Returns
+    -------
+    x : Tensor
+        Output tensor after applying the expansion block.
+    """
     prefix = 'block_{}_'.format(block_id)
     total_filters = t*filters
     x = Conv2D(total_filters,1,padding='same',use_bias=False, name = prefix +'expand')(x)
@@ -18,20 +46,83 @@ def expansion_block(x,t,filters,block_id):
     x = ReLU(6,name = prefix +'expand_relu')(x)
     return x
 
-def depthwise_block(x,stride,block_id):
+def depthwise_block(x, stride, block_id):
+    """
+    Apply depthwise convolution block to the input tensor x.
+
+    Parameters
+    ----------
+    x : Tensor
+        Input tensor.
+    stride : int
+        Stride of the convolution block.
+    block_id : int
+        Index of the block.
+
+    Returns
+    -------
+    Tensor
+        Output tensor after applying the depthwise convolution block.
+    """
+    
     prefix = 'block_{}_'.format(block_id)
-    x = DepthwiseConv2D(3,strides=(stride,stride),padding ='same', use_bias = False, name = prefix + 'depthwise_conv')(x)
-    x = BatchNormalization(name=prefix +'dw_bn')(x)
-    x = ReLU(6,name=prefix +'dw_relu')(x)
+    x = DepthwiseConv2D(3, strides=(stride, stride), padding='same', use_bias=False, name=prefix+'depthwise_conv')(x)
+    x = BatchNormalization(name=prefix+'dw_bn')(x)
+    x = ReLU(6, name=prefix+'dw_relu')(x)
     return x
 
-def projection_block(x,out_channels,block_id):
+
+def projection_block(x, out_channels, block_id):
+    """
+    Applies a projection block to the input tensor x.
+
+    Parameters
+    ----------
+    x : Tensor
+        Input tensor.
+    out_channels : int
+        Number of output channels in the projection block.
+    block_id : int
+        Block ID for naming layers.
+
+    Returns
+    -------
+    x : Tensor
+        Output tensor after applying the projection block.
+    """
     prefix = 'block_{}_'.format(block_id)
-    x = Conv2D(filters = out_channels,kernel_size = 1,padding='same',use_bias=False,name= prefix + 'compress')(x)
-    x = BatchNormalization(name=prefix +'compress_bn')(x)
+    x = Conv2D(filters=out_channels, kernel_size=1, padding='same', use_bias=False, name=prefix + 'compress')(x)
+    x = BatchNormalization(name=prefix + 'compress_bn')(x)
     return x
+
 
 def Bottleneck(x,t,filters, out_channels,stride,block_id):
+    """
+    Creates a bottleneck block, which is composed of an expansion block, a 
+    depthwise block, and a projection block, and a residual connection.
+    Parameters
+    ----------
+    x : tensor
+        Input tensor to the bottleneck block.
+    t : int
+        Integer expansion factor, used to scale the number of output channels 
+        in the expansion block.
+    filters : int
+        Number of filters in the input tensor.
+    out_channels : int
+        Number of filters in the output tensor.
+    stride : int
+        Integer stride for the depthwise convolution operation in the 
+        depthwise block.
+    block_id : int
+        Integer block ID used to name layers in the bottleneck block.
+    
+    Returns
+    -------
+    y : tensor
+        Output tensor of the bottleneck block.
+    
+    """
     y = expansion_block(x,t,filters,block_id)
     y = depthwise_block(y,stride,block_id)
     y = projection_block(y, out_channels,block_id)
@@ -39,7 +130,24 @@ def Bottleneck(x,t,filters, out_channels,stride,block_id):
         y = add([x,y])
     return y
 
+
 def MobileNetV2(input_shape = (224,224,3), n_classes=2):
+    """
+    MobileNetV2 architecture model for image classification tasks
+
+    Parameters
+    ----------
+    input_shape : tuple, optional
+        Input tuple. The default is (224,224,3).
+    n_classes : int, optional
+        Defines the number of classes. The default is 2.
+
+    Returns
+    -------
+    model : none
+        Returns the MobileNetV2 model.
+
+    """
     input = Input(input_shape)
 
     x = Conv2D(32,kernel_size=3,strides=(2,2),padding = 'same', use_bias=False)(input)
@@ -88,29 +196,53 @@ def MobileNetV2(input_shape = (224,224,3), n_classes=2):
 
     return model
 
-def get_pcam_generators(base_dir, train_batch_size=32, val_batch_size=32):
+def get_pcam_generators(
+        base_dir: str, 
+        train_batch_size: int = 32, 
+        val_batch_size: int = 32
+        ):
+    """
+    Generate image data batches for the PCam dataset using the Keras ImageDataGenerator.
 
-     # dataset parameters
-     train_path = os.path.join(base_dir, 'train')
-     valid_path = os.path.join(base_dir, 'valid')
+    Parameters
+    ----------
+    base_dir : str
+        The base directory path for the dataset.
+    train_batch_size : int, optional
+        The batch size for training data. The default is 32.
+    val_batch_size : int, optional
+        The batch size for validation data. The default is 32.
+
+    Returns
+    -------
+    train_gen : DirectoryIterator
+        A Keras DirectoryIterator for training data.
+    val_gen : DirectoryIterator
+        A Keras DirectoryIterator for validation data.
+
+    """
+    # dataset parameters
+    train_path = os.path.join(base_dir, 'train')
+    valid_path = os.path.join(base_dir, 'valid')
 
 
-     RESCALING_FACTOR = 1./255
+    RESCALING_FACTOR = 1./255
 
-     # instantiate data generators
-     datagen = ImageDataGenerator(rescale=RESCALING_FACTOR)
+    # instantiate data generators
+    datagen = ImageDataGenerator(rescale=RESCALING_FACTOR)
 
-     train_gen = datagen.flow_from_directory(train_path,
-                                             target_size=(IMAGE_SIZE, IMAGE_SIZE),
-                                             batch_size=train_batch_size,
-                                             class_mode='binary')
+    train_gen = datagen.flow_from_directory(train_path,
+                                            target_size=(IMAGE_SIZE, IMAGE_SIZE),
+                                            batch_size=train_batch_size,
+                                            class_mode='binary')
 
-     val_gen = datagen.flow_from_directory(valid_path,
-                                             target_size=(IMAGE_SIZE, IMAGE_SIZE),
-                                             batch_size=val_batch_size,
-                                             class_mode='binary')
+    val_gen = datagen.flow_from_directory(valid_path,
+                                            target_size=(IMAGE_SIZE, IMAGE_SIZE),
+                                            batch_size=val_batch_size,
+                                            class_mode='binary')
 
-     return train_gen, val_gen
+    return train_gen, val_gen
+
  
 # the size of the images in the PCAM dataset
 IMAGE_SIZE = 96
@@ -153,6 +285,5 @@ val_steps = val_gen.n//val_gen.batch_size//20
 history = model.fit(train_gen, steps_per_epoch=train_steps,
                     validation_data=val_gen,
                     validation_steps=val_steps,
-                    epochs=10,
+                    epochs=1,
                     callbacks=callbacks_list)
-#einde
