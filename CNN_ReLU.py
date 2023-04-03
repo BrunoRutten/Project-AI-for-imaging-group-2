@@ -1,4 +1,4 @@
-<<<<<<< HEAD
+
 """
 Project AI for Medical Image Analysis
 Group 2
@@ -10,10 +10,12 @@ Version 2, 28-3-2023
 import tensorflow as tf
 from tensorflow.keras.preprocessing.image import ImageDataGenerator
 from tensorflow.keras.optimizers import Adam
-from tensorflow.keras.layers import Conv2D, DepthwiseConv2D, ReLU, BatchNormalization, add,Softmax, AveragePooling2D, Dense, Input, GlobalAveragePooling2D
+from tensorflow.keras.layers import Conv2D, DepthwiseConv2D, ReLU, BatchNormalization, add,Softmax, AveragePooling2D, Dense, Input, GlobalAveragePooling2D,ELU,PReLU,LeakyReLU
 from tensorflow.keras.models import Model
 from tensorflow.keras.callbacks import ModelCheckpoint, TensorBoard
 from tensorflow.keras.optimizers import SGD
+from tensorflow.keras.metrics import *
+from tensorflow.keras.activations import selu, swish
 
 # disable overly verbose tensorflow logging
 import os
@@ -43,7 +45,7 @@ def expansion_block(x, t: int, filters: int, block_id: int):
     total_filters = t*filters
     x = Conv2D(total_filters,1,padding='same',use_bias=False, name = prefix +'expand')(x)
     x = BatchNormalization(name=prefix +'expand_bn')(x)
-    x = ReLU(6,name = prefix +'expand_relu')(x)
+    x = LeakyReLU(6,name = prefix +'expand_leakyrelu')(x)
     return x
 
 def depthwise_block(x, stride, block_id):
@@ -68,7 +70,7 @@ def depthwise_block(x, stride, block_id):
     prefix = 'block_{}_'.format(block_id)
     x = DepthwiseConv2D(3, strides=(stride, stride), padding='same', use_bias=False, name=prefix+'depthwise_conv')(x)
     x = BatchNormalization(name=prefix+'dw_bn')(x)
-    x = ReLU(6, name=prefix+'dw_relu')(x)
+    x = LeakyReLU(6, name=prefix+'dw_leakyrelu')(x)
     return x
 
 
@@ -152,7 +154,7 @@ def MobileNetV2(input_shape = (224,224,3), n_classes=2):
 
     x = Conv2D(32,kernel_size=3,strides=(2,2),padding = 'same', use_bias=False)(input)
     x = BatchNormalization(name='conv1_bn')(x)
-    x = ReLU(6, name = 'conv1_relu')(x)
+    x = LeakyReLU(6, name = 'conv1_leakyrelu')(x)
 
     # 17 Bottlenecks
 
@@ -185,12 +187,12 @@ def MobileNetV2(input_shape = (224,224,3), n_classes=2):
     #1*1 conv
     x = Conv2D(filters = 1280,kernel_size = 1,padding='same',use_bias=False, name = 'last_conv')(x)
     x = BatchNormalization(name='last_bn')(x)
-    x = ReLU(6,name='last_relu')(x)
+    x = LeakyReLU(6,name='last_relu')(x)
 
     #AvgPool 7*7
     x = GlobalAveragePooling2D(name='global_average_pool')(x)
 
-    output = Dense(n_classes,activation='softmax')(x)
+    output = Dense(n_classes,activation='sigmoid')(x)
 
     model = Model(input, output)
 
@@ -258,10 +260,10 @@ model.summary()
 # Set up data generators
 train_gen, val_gen = get_pcam_generators("C:/Users/20201796/Documents/TUe/Year 3 BMT/Q3/8P361 - Project AI for medical image analysis/8p361-project-imaging-master")
 
-model.compile(SGD(learning_rate=0.001, momentum=0.95), loss = 'binary_crossentropy', metrics=['accuracy'])
+model.compile(SGD(learning_rate=0.001,momentum=0.95), loss = 'binary_crossentropy', metrics=['accuracy', Precision(), Recall(), AUC(), FalseNegatives(), FalsePositives(), TrueNegatives(), TruePositives()])
 
 # save the model and weights
-model_name = 'CNN_model_ReLU'
+model_name = 'CNN_model_LeakyReLU'
 model_filepath = model_name + '.json'
 weights_filepath = model_name + '_weights.hdf5'
 
@@ -277,13 +279,13 @@ callbacks_list = [checkpoint, tensorboard]
 
 
 # train the model, note that we define "mini-epochs"
-train_steps = train_gen.n//train_gen.batch_size//20
-val_steps = val_gen.n//val_gen.batch_size//20
+train_steps = train_gen.n//train_gen.batch_size
+val_steps = val_gen.n//val_gen.batch_size
 
 # since the model is trained for only 10 "mini-epochs", i.e. half of the data is
 # not used during training
 history = model.fit(train_gen, steps_per_epoch=train_steps,
                     validation_data=val_gen,
                     validation_steps=val_steps,
-                    epochs=1,
+                    epochs=10,
                     callbacks=callbacks_list)
