@@ -3,7 +3,7 @@ Project AI for Medical Image Analysis
 Group 2
 Note: this code is adapted from: 
     https://github.com/Haikoitoh/paper-implementation
-Version 3, 04-04-2023
+Version 4, 06-04-2023
 """
 
 #======================INITIALIZE PACKAGES=====================================
@@ -38,6 +38,9 @@ n_classes = 1
 # the type of linear activator to be used. Choose from:
 # ReLU, ELU, LeakyReLU, SeLU, Swish and PreLU
 LUtype = 'ReLU'
+
+# give the model a name
+model_name = 'CNN_model_ReLU'
 
 #===========================INITIALIZE BLOCKS==================================
 def expansion_block(x,t,filters,block_id,LUtype):
@@ -105,12 +108,16 @@ def depthwise_block(x,stride,block_id,LUtype):
     Tensor
         Output tensor after applying the depthwise convolution block.
     """
+    # raise error if invalid LUtype is given
     if LUtype not in stdactivators:
         raise ValueError('Invalid activation function. Please choose from {}'.format(stdactivators))
-        
+    # the prefix for block id
     prefix = 'block_{}_'.format(block_id)
+    # the depthwise convolution
     x = DepthwiseConv2D(3,strides=(stride,stride),padding ='same', use_bias = False, name = prefix + 'depthwise_conv')(x)
+    # apply batch normalization
     x = BatchNormalization(name=prefix +'dw_bn')(x)
+    # select appropriate LUtype
     if LUtype in stdactivators:
         x = eval(LUtype + "(6,name=prefix +'dw_relu')(x)")
     elif LUtype == 'PReLU':
@@ -139,8 +146,11 @@ def projection_block(x,out_channels,block_id):
     x : Tensor
         Output tensor after applying the projection block.
     """
+    # the prefix for block id
     prefix = 'block_{}_'.format(block_id)
+    # the depthwise convolution
     x = Conv2D(filters = out_channels,kernel_size = 1,padding='same',use_bias=False,name= prefix + 'compress')(x)
+    # apply batch normalization
     x = BatchNormalization(name=prefix +'compress_bn')(x)
     return x
 
@@ -173,8 +183,11 @@ def Bottleneck(x,t,filters, out_channels,stride,block_id,LUtype):
         Output tensor of the bottleneck block.
     
     """
+    # apply expansion block
     y = expansion_block(x,t,filters,block_id,LUtype)
+    # apply depthwise blcok
     y = depthwise_block(y,stride,block_id,LUtype)
+    # apply projection block
     y = projection_block(y, out_channels,block_id)
     if y.shape[-1]==x.shape[-1]:
         y = add([x,y])
@@ -200,12 +213,16 @@ def MobileNetV2(input_shape = (96,96,3), n_classes=2,LUtype='ReLU'):
         Returns the MobileNetV2 model.
 
     """
+    # raise error if invalid LUtype is given
     if LUtype not in stdactivators:
         raise ValueError('Invalid activation function. Please choose from {}'.format(stdactivators))
-        
+    # define input for first layer    
     input = Input(input_shape)
+    # apply convolutional layer
     x = Conv2D(32,kernel_size=3,strides=(2,2),padding = 'same', use_bias=False)(input)
+    # apply batch normalization
     x = BatchNormalization(name='conv1_bn')(x)
+    # select appropriate LUtype
     if LUtype in stdactivators:
         x = eval(LUtype + "(6, name = 'conv1_relu')(x)")
     elif LUtype == 'PReLU':
@@ -215,8 +232,7 @@ def MobileNetV2(input_shape = (96,96,3), n_classes=2,LUtype='ReLU'):
     elif LUtype == 'Swish':
         x = swish(x)
 
-
-    # 17 Bottlenecks
+    #  add conv2d and 17 Bottlenecks
 
     x = depthwise_block(x,stride=1,block_id=1,LUtype=LUtype)
     x = projection_block(x, out_channels=16,block_id=1)
@@ -243,8 +259,7 @@ def MobileNetV2(input_shape = (96,96,3), n_classes=2,LUtype='ReLU'):
 
     x = Bottleneck(x, t = 6, filters = x.shape[-1], out_channels = 320, stride = 1,block_id = 17,LUtype=LUtype)
 
-
-    #1*1 conv
+    # add 1*1 conv
     x = Conv2D(filters = 1280,kernel_size = 1,padding='same',use_bias=False, name = 'last_conv')(x)
     x = BatchNormalization(name='last_bn')(x)
     if LUtype in stdactivators:
@@ -257,10 +272,13 @@ def MobileNetV2(input_shape = (96,96,3), n_classes=2,LUtype='ReLU'):
         x = swish(x)
     
 
-    #AvgPool 7*7
+    # add AvgPool 7*7
     x = GlobalAveragePooling2D(name='global_average_pool')(x)
+    
+    # define output with sigmoid activation
     output = Dense(n_classes,activation='sigmoid')(x)
 
+    # create model
     model = Model(input, output)
 
     return model
@@ -307,6 +325,7 @@ def get_pcam_generators(base_dir, train_batch_size=32, val_batch_size=32):
     return train_gen, val_gen
 
 #==========================RUN THE MODEL=======================================
+# get the model using MobileNetV2 function and give summary
 model = MobileNetV2(input_shape,n_classes,LUtype)
 model.summary()
 
@@ -314,10 +333,10 @@ model.summary()
 # Set up data generators
 train_gen, val_gen = get_pcam_generators(PATH)
 
+# compile the model
 model.compile(SGD(learning_rate=0.001,momentum=0.95), loss = 'binary_crossentropy', metrics=['accuracy', Precision(), Recall(), AUC(), FalseNegatives(), FalsePositives(), TrueNegatives(), TruePositives()])
 
 # save the model and weights
-model_name = 'CNN_model_SeLU'
 model_filepath = model_name + '.json'
 weights_filepath = model_name + '_weights.hdf5'
 
@@ -332,12 +351,9 @@ tensorboard = TensorBoard(os.path.join('logs', model_name))
 callbacks_list = [checkpoint, tensorboard]
 
 
-# train the model, note that we define "mini-epochs"
+# train the model
 train_steps = train_gen.n//train_gen.batch_size
 val_steps = val_gen.n//val_gen.batch_size
-
-# since the model is trained for only 10 "mini-epochs", i.e. half of the data is
-# not used during training
 history = model.fit(train_gen, steps_per_epoch=train_steps,
                     validation_data=val_gen,
                     validation_steps=val_steps,
